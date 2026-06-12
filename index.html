@@ -106,7 +106,7 @@
     <div class="howto">
       <h3>Telefona nasıl eklenir</h3>
       <p><b>Önce:</b> Bu sayfayı gerçek tarayıcıda (Safari/Chrome) aç — uygulama içi önizleme indirmeye izin vermez.</p>
-      <p><b>iPhone:</b> "Takvim dosyasını indir"e dokun &rarr; açılan paylaş sayfasından <b>Takvim</b>'i seç (ya da Dosyalar'a kaydet). Alternatif: .ics'i kendine e&#8209;posta atıp <b>Apple Mail</b>'de eke dokun &rarr; <b>"Tümünü Ekle"</b>.</p>
+      <p><b>iPhone:</b> "Takvim dosyasını indir"e dokun &rarr; açılan ekranda etkinlikleri görür, <b>"Tümünü Ekle"</b>ye dokunursun. Açılmazsa: dokununca <b>Dosyalara Kaydet</b>, sonra Dosyalar'da .ics'e dokun &rarr; "Tümünü Ekle".</p>
       <p><b>Mac:</b> Dosyaya çift tıkla; Takvim hangi takvime ekleneceğini sorar.</p>
       <p><b>Android:</b> Google Takvim &rarr; Ayarlar &rarr; İçe/Dışa Aktar üzerinden içe aktar.</p>
     </div>
@@ -364,8 +364,15 @@ function buildICS(data){
 }
 $('#dl').addEventListener('click',async()=>{
   if(!icsCache)return;
+  const ua=navigator.userAgent||'';
+  const isiOS=/iPhone|iPad|iPod/.test(ua)||(/Macintosh/.test(ua)&&navigator.maxTouchPoints>1);
+  // iOS: .ics'i doğrudan aç → "Tümünü Ekle" ekranı gelsin (paylaş sayfası takvim seçeneği vermiyor)
+  if(isiOS){
+    window.location.href='data:text/calendar;charset=utf-8,'+encodeURIComponent(icsCache);
+    return;
+  }
   const blob=new Blob([icsCache],{type:'text/calendar;charset=utf-8'});
-  // 1) Mobil: iOS/Android paylaş sayfası — buradan Takvim'e ekle / Dosyalar'a kaydet
+  // Diğer mobil: paylaş sayfası
   try{
     const file=new File([blob],'ucus-programi.ics',{type:'text/calendar'});
     if(navigator.canShare&&navigator.canShare({files:[file]})){
@@ -373,12 +380,11 @@ $('#dl').addEventListener('click',async()=>{
       return;
     }
   }catch(e){ if(e&&e.name==='AbortError') return; }
-  // 2) Masaüstü: normal indirme
+  // Masaüstü: indir
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download='ucus-programi.ics';
   document.body.appendChild(a);a.click();a.remove();
-  // 3) İndirme engelliyse (bazı tarayıcılar) yeni sekmede aç
-  setTimeout(()=>{ try{ window.open(url,'_blank'); }catch(e){} setTimeout(()=>URL.revokeObjectURL(url),3000); },300);
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
 });
 </script>
 </body>
