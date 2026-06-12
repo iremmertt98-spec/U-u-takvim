@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Uçuş Programı → Takvim</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root{
+    --ink:#0f1c2e;--ink-soft:#1d3047;--paper:#f4f1e9;--line:#d9d2c4;
+    --amber:#f0a92b;--amber-deep:#c97f12;--sky:#3f7da6;--leaf:#3f7d4e;
+    --slate:#5d6b7a;--danger:#b8472f;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--paper);color:var(--ink);line-height:1.5;padding:24px 16px 64px}
+  .wrap{max-width:760px;margin:0 auto}
+  header{margin-bottom:22px}
+  .kicker{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--amber-deep);font-weight:700}
+  h1{font-size:30px;line-height:1.1;margin:6px 0 8px;letter-spacing:-.01em}
+  h1 .plane{color:var(--amber)}
+  .lede{color:var(--slate);font-size:15px;max-width:54ch}
+  .privacy{margin-top:14px;display:inline-flex;gap:8px;align-items:center;font-size:12.5px;
+    color:var(--ink-soft);background:#eef4f0;border:1px solid #cfe0d4;border-radius:999px;padding:6px 13px}
+  .privacy b{color:var(--leaf)}
+  .drop{margin-top:22px;border:2px dashed var(--line);border-radius:14px;background:#fbfaf6;
+    padding:30px 22px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
+  .drop:hover,.drop.over{border-color:var(--amber);background:#fdf6e8}
+  .drop .big{font-size:16px;font-weight:600}
+  .drop .small{font-size:13px;color:var(--slate);margin-top:4px}
+  .drop .btn{display:inline-block;margin-top:14px;background:var(--ink);color:#fff;border:none;
+    border-radius:9px;padding:11px 20px;font-size:14px;font-weight:600;cursor:pointer}
+  input[type=file]{display:none}
+  .status{margin-top:16px;font-size:14px;color:var(--slate);min-height:20px}
+  .status.err{color:var(--danger);font-weight:600}
+  .panel{margin-top:22px;display:none}
+  .meta{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:baseline;border-bottom:1px solid var(--line);
+    padding-bottom:12px;margin-bottom:4px}
+  .meta .m{font-size:13px;color:var(--slate)}
+  .meta .m b{color:var(--ink);font-variant-numeric:tabular-nums}
+  .board{margin-top:6px}
+  .day{display:grid;grid-template-columns:54px 1fr;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+  .dnum{font-variant-numeric:tabular-nums;text-align:center}
+  .dnum .n{font-size:20px;font-weight:700;line-height:1}
+  .dnum .w{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--slate);margin-top:2px}
+  .day.flyday .dnum .n{color:var(--sky)}
+  .legs{min-width:0}
+  .leg{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:13.5px;
+    display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;padding:1px 0}
+  .leg .no{color:var(--ink);font-weight:700;min-width:62px}
+  .leg .rt{color:var(--ink-soft)}
+  .leg .ar{color:var(--amber-deep)}
+  .leg .nx{color:var(--danger);font-weight:700}
+  .leg .flag{color:var(--danger);font-weight:700;cursor:help}
+  .route-tag{font-size:11px;color:var(--slate);letter-spacing:.04em;text-transform:uppercase;font-family:inherit}
+  .chip{display:inline-block;font-size:12px;font-weight:700;border-radius:6px;padding:3px 9px;letter-spacing:.02em}
+  .chip.off{background:#e9f1ea;color:var(--leaf);border:1px solid #c6dbca}
+  .chip.cfr{background:#efe7f5;color:#6a3aa0;border:1px solid #d6c2ee}
+  .chip.sby{background:#fce4ec;color:#b0185f;border:1px solid #f3bcd2}
+  .chip.leave{background:#ededed;color:#555;border:1px solid #cfcfcf}
+  .chip-desc{font-size:12px;color:var(--slate);margin-left:8px}
+  .warn{margin-top:18px;background:#fdf3e2;border:1px solid #f0d49a;border-radius:10px;
+    padding:12px 14px;font-size:13px;color:#7a5a12;display:none}
+  .warn b{color:#5c440d}
+  .actions{margin-top:24px;display:flex;flex-wrap:wrap;gap:12px}
+  .download{background:var(--amber);color:#1a1305;border:none;border-radius:10px;padding:13px 22px;
+    font-size:15px;font-weight:700;cursor:pointer}
+  .download:hover{background:var(--amber-deep);color:#fff}
+  .secondary{background:none;border:1px solid var(--line);border-radius:10px;padding:13px 18px;
+    font-size:14px;cursor:pointer;color:var(--ink)}
+  .howto{margin-top:30px;border-top:1px solid var(--line);padding-top:18px;font-size:13.5px;color:var(--slate)}
+  .howto h3{font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-soft);margin-bottom:8px}
+  .howto p{margin-bottom:7px}
+  .howto b{color:var(--ink)}
+  footer{margin-top:30px;font-size:11.5px;color:#9aa3ad;text-align:center}
+  @media (max-width:480px){h1{font-size:24px}.day{grid-template-columns:46px 1fr;gap:10px}.leg{font-size:12.5px}}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="kicker">Ekip · Bağımsız araç</div>
+    <h1><span class="plane">&#9992;</span> Uçuş Programı &rarr; Takvim</h1>
+    <p class="lede">Aylık uçuş programı PDF'ini seç; saatleri Türkiye saatine çevirip telefonuna ekleyebileceğin bir takvim dosyası (.ics) üretsin.</p>
+    <div class="privacy">&#128274; PDF cihazından <b>hiç çıkmaz</b> — tüm işlem tarayıcında yapılır.</div>
+  </header>
+
+  <label class="drop" id="drop">
+    <div class="big">Programı buraya bırak ya da seç</div>
+    <div class="small">EKIP PLANLAMA SISTEMI aylık program PDF'i</div>
+    <span class="btn">PDF seç</span>
+    <input type="file" id="file" accept="application/pdf,.pdf">
+  </label>
+
+  <div class="status" id="status"></div>
+
+  <section class="panel" id="panel">
+    <div class="meta" id="meta"></div>
+    <div class="board" id="board"></div>
+    <div class="warn" id="warn"></div>
+    <div class="actions">
+      <button class="download" id="dl">Takvim dosyasını indir (.ics)</button>
+      <button class="secondary" id="again">Başka PDF</button>
+    </div>
+    <div class="howto">
+      <h3>Telefona nasıl eklenir</h3>
+      <p><b>Önce:</b> Bu sayfayı gerçek tarayıcıda (Safari/Chrome) aç — uygulama içi önizleme indirmeye izin vermez.</p>
+      <p><b>iPhone:</b> "Takvim dosyasını indir"e dokun &rarr; açılan paylaş sayfasından <b>Takvim</b>'i seç (ya da Dosyalar'a kaydet). Alternatif: .ics'i kendine e&#8209;posta atıp <b>Apple Mail</b>'de eke dokun &rarr; <b>"Tümünü Ekle"</b>.</p>
+      <p><b>Mac:</b> Dosyaya çift tıkla; Takvim hangi takvime ekleneceğini sorar.</p>
+      <p><b>Android:</b> Google Takvim &rarr; Ayarlar &rarr; İçe/Dışa Aktar üzerinden içe aktar.</p>
+    </div>
+  </section>
+
+  <footer>Türk Hava Yolları ile resmi bağı yoktur. Veriler yalnızca senin cihazında işlenir.</footer>
+</div>
+
+<script>
+const pdfjsLib = window.pdfjsLib;
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+const TR={OCA:0,SUB:1,MAR:2,NIS:3,MAY:4,HAZ:5,TEM:6,AGU:7,EYL:8,EKI:9,KAS:10,ARA:11};
+const TRDAY=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];
+// havalimanı UTC farkı (dakika) — yaz tarifesi
+const OFF={IST:180,SAW:180,ESB:180,ADB:180,AYT:180,DLM:180,BJV:180,TZX:180,GZT:180,
+ VKO:180,SVO:180,DME:180,LED:180,KBP:180,RUH:180,JED:180,DMM:180,KWI:180,DOH:180,BGW:180,
+ GYD:240,DXB:240,AUH:240,MCT:240,TBS:240,EVN:240,
+ MAD:120,BCN:120,BRU:120,HAM:120,MXP:120,LIN:120,FCO:120,CDG:120,ORY:120,FRA:120,MUC:120,
+ DUS:120,AMS:120,VIE:120,ZRH:120,GVA:120,CPH:120,ARN:120,OSL:120,WAW:120,PRG:120,BUD:120,
+ ATH:180,SKG:180,SOF:180,OTP:180,BEG:120,ZAG:120,
+ LHR:60,LGW:60,MAN:60,LCY:60,DUB:60,LIS:60,
+ TAS:300,ALA:300,DEL:330,BOM:330,
+ JFK:-240,EWR:-240,IAD:-240,ORD:-300,LAX:-420,YYZ:-240,GRU:-180};
+const CITY={VKO:'Moskova',SVO:'Moskova',DME:'Moskova',LED:'St. Petersburg',GYD:'Bakü',
+ RUH:'Riyad',JED:'Cidde',DXB:'Dubai',DOH:'Doha',KWI:'Kuveyt',
+ MAD:'Madrid',BCN:'Barselona',BRU:'Brüksel',HAM:'Hamburg',MXP:'Milano',FCO:'Roma',
+ CDG:'Paris',FRA:'Frankfurt',MUC:'Münih',AMS:'Amsterdam',VIE:'Viyana',ZRH:'Zürih',
+ LHR:'Londra',MAN:'Manchester',DUB:'Dublin',LIS:'Lizbon',ATH:'Atina',TAS:'Taşkent',
+ IST:'İstanbul',SAW:'İstanbul',ESB:'Ankara',ADB:'İzmir',AYT:'Antalya'};
+const CODE={
+ CFR:{cls:'cfr',label:'CFR',desc:'Call For Roster'},
+ IBC:{cls:'off',label:'IBC',desc:'İstek izni'},
+ IBB:{cls:'off',label:'IBB',desc:'Boş gün'},
+ IBY:{cls:'off',label:'IBY',desc:'Boş gün'},
+ IBV:{cls:'off',label:'IBV',desc:'Evlilik yıldönümü izni'},
+ III:{cls:'leave',label:'III',desc:'Yıllık izin'},
+ ASBY:{cls:'sby',label:'ASBY',desc:'Havalimanı nöbeti'},
+ GG:{cls:'leave',label:'GG',desc:'Önceki aydan devam eden görev'}};
+
+let icsCache=null;
+const $=s=>document.querySelector(s);
+const status=(m,e=false)=>{const s=$('#status');s.textContent=m;s.className='status'+(e?' err':'');};
+const pad=n=>String(n).padStart(2,'0');
+const cleanT=s=>{const p=s.replace(/\s+/g,'').split(':');return {h:+p[0],m:+p[1]};};
+const addDays=(d,n)=>{const x=new Date(d.getTime());x.setUTCDate(x.getUTCDate()+n);return x;};
+function mkTR(Y,anc,t,ap){ // havalimanı yerel saatini Türkiye saatine çevir
+  const base=Date.UTC(Y,anc.mo,anc.d,t.h,t.m);
+  return new Date(base+(180-(OFF[ap]!==undefined?OFF[ap]:180))*60000);
+}
+const dKey=d=>d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate());
+const hhmm=d=>pad(d.getUTCHours())+':'+pad(d.getUTCMinutes());
+
+// ---- dosya ----
+const drop=$('#drop'),fileInput=$('#file');
+['dragover','dragenter'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop',ev=>{const f=ev.dataTransfer.files[0];if(f)handle(f);});
+fileInput.addEventListener('change',ev=>{const f=ev.target.files[0];if(f)handle(f);});
+$('#again').addEventListener('click',()=>{$('#panel').style.display='none';fileInput.value='';status('');window.scrollTo({top:0,behavior:'smooth'});});
+
+async function handle(file){
+  if(!/\.pdf$/i.test(file.name)&&file.type!=='application/pdf'){status('Lütfen bir PDF dosyası seç.',true);return;}
+  status('PDF okunuyor…');
+  try{
+    const buf=await file.arrayBuffer();
+    const text=await extractText(buf);
+    const data=parseRoster(text);
+    if(!data.flights.length&&!data.ground.length){
+      status('Bu PDF içinde program satırı bulunamadı. Doğru aylık program PDF\u2019i mi? Biçim farklı olabilir.',true);return;
+    }
+    render(data); status('');
+  }catch(err){console.error(err);status('Okunamadı: '+err.message,true);}
+}
+async function extractText(buf){
+  const doc=await pdfjsLib.getDocument({data:buf}).promise;
+  let out='';
+  for(let p=1;p<=doc.numPages;p++){
+    const page=await doc.getPage(p);
+    const c=await page.getTextContent();
+    out+=' '+c.items.map(i=>i.str).join(' ');
+  }
+  return out.replace(/\s+/g,' ');
+}
+
+// ---- ayrıştırma ----
+function parseRoster(text){
+  const ym=text.match(/\d{2}[A-Z]{3}(\d{4})/);
+  const Y=ym?+ym[1]:new Date().getFullYear();
+  const sicil=(text.match(/\b(\d{6})\b/)||[])[1]||null;
+  const perM=text.match(/Period:\s*([0-9A-Z]+)\s*-\s*([0-9A-Z]+)/i);
+  const period=perM?(perM[1]+' \u2013 '+perM[2]):null;
+
+  const localFly=/TK\s?(\d{2,4})\s+([A-Z]{3})\s*\/\s*(\d{1,2}:\d{2})\s+([A-Z]{3})\s*\/\s*(\d{1,2}:\d{2})/g;
+  const mbAll=[...text.matchAll(/\bMB:\s*(\d{2})([A-Z]{3})/g)];
+  const cmp=(a,b)=>(a.mo-b.mo)||(a.d-b.d);
+
+  const flights=[]; const layoverNo=new Set();
+  for(let i=0;i<mbAll.length;i++){
+    const start=mbAll[i].index, end=(i+1<mbAll.length)?mbAll[i+1].index:text.length;
+    const seg=text.slice(start,end);
+    localFly.lastIndex=0;
+    const legs=[...seg.matchAll(localFly)].map(m=>({no:'TK'+m[1],org:m[2],depL:cleanT(m[3]),dst:m[4],arrL:cleanT(m[5])}));
+    if(!legs.length) continue;
+    const blockStart={d:+mbAll[i][1],mo:TR[mbAll[i][2]]};
+    if(blockStart.mo===undefined) continue;
+    const isLayover=/YI\s*\/\s*YDS|YDS:/.test(seg);
+    // dönüş bacağı için en geç tarih: konaklamada tüm tarih jetonları, değilse sadece MB/GMB
+    const dre=isLayover?/\b(?:MB|GMB|MS|GMS):\s*(\d{2})([A-Z]{3})/g:/\b(?:MB|GMB):\s*(\d{2})([A-Z]{3})/g;
+    let maxDate={...blockStart},dm;
+    while((dm=dre.exec(seg))){const mo=TR[dm[2]];if(mo===undefined)continue;const c={d:+dm[1],mo};if(cmp(c,maxDate)>0)maxDate=c;}
+    const made=[];
+    legs.forEach(leg=>{
+      const isReturn=(leg.dst==='IST'&&leg.org!=='IST');
+      const anc=isReturn?maxDate:blockStart;
+      let dep=mkTR(Y,anc,leg.depL,leg.org), arr=mkTR(Y,anc,leg.arrL,leg.dst);
+      if(arr<dep) arr=addDays(arr,1);
+      const f={no:leg.no,org:leg.org,dst:leg.dst,dep,arr,layover:isLayover};
+      made.push(f); flights.push(f);
+      if(isLayover) layoverNo.add(leg.no);
+    });
+    // kronolojik düzeltme: bir bacak önceki bacağın varışından önce kalkamaz (sıra düzeninde)
+    for(let k=1;k<made.length;k++){
+      if(made[k].dep<made[k-1].arr){made[k].dep=addDays(made[k].dep,1);made[k].arr=addDays(made[k].arr,1);}
+    }
+  }
+  // konaklama VEYA gece yarısını geçen görevleri "teyit et" olarak işaretle
+  flights.forEach(f=>{ if(f.arr.getUTCDate()!==f.dep.getUTCDate()) f.layover=true; if(f.layover) layoverNo.add(f.no); });
+  // dedupe
+  const seen=new Set(),uniq=[];
+  flights.sort((a,b)=>a.dep-b.dep).forEach(f=>{const k=f.no+'|'+dKey(f.dep);if(!seen.has(k)){seen.add(k);uniq.push(f);}});
+
+  // ---- yer günleri (blok-yerel MB/MS) ----
+  const codeRe=/\b(CFR|IBC|IBB|IBV|IBY|III|ASBY|GG)\s+IST\s*\/\s*(\d{1,2}:\d{2})\s+IST\s*\/\s*(\d{1,2}:\d{2})/;
+  const ground=[],gseen=new Set();
+  for(let i=0;i<mbAll.length;i++){
+    const start=mbAll[i].index+mbAll[i][0].length, end=(i+1<mbAll.length)?mbAll[i+1].index:text.length;
+    const seg=text.slice(start,end);
+    const cm=seg.match(codeRe); if(!cm) continue;
+    const d0=+mbAll[i][1], m0=TR[mbAll[i][2]]; if(m0===undefined) continue;
+    const ms=seg.match(/\bMS:\s*(\d{2})([A-Z]{3})/);
+    let d1=d0,m1=m0; if(ms&&TR[ms[2]]!==undefined){d1=+ms[1];m1=TR[ms[2]];}
+    const key=cm[1]+'|'+m0+'|'+d0; if(gseen.has(key)) continue; gseen.add(key);
+    if(cm[1]==='ASBY'){
+      let s=mkTR(Y,{d:d0,mo:m0},cleanT(cm[2]),'IST'), e=mkTR(Y,{d:d0,mo:m0},cleanT(cm[3]),'IST');
+      if(e<=s) e=addDays(e,1);
+      ground.push({code:'ASBY',timed:true,start:s,end:e});
+    }else{
+      const s=new Date(Date.UTC(Y,m0,d0));
+      let e=new Date(Date.UTC(Y,m1,d1)); e=addDays(e,1);
+      ground.push({code:cm[1],allDay:true,start:s,end:e});
+    }
+  }
+  return {Y,sicil,period,flights:uniq,ground,layover:[...layoverNo]};
+}
+
+// ---- ekran ----
+function render(data){
+  const days={};
+  const keyOf=d=>d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate());
+  const ensure=d=>days[keyOf(d)]||(days[keyOf(d)]={date:new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate())),flights:[],grounds:[]});
+  data.flights.forEach(f=>ensure(f.dep).flights.push(f));
+  data.ground.forEach(g=>ensure(g.start).grounds.push(g));
+  const keys=Object.keys(days).sort();
+
+  const meta=$('#meta');meta.innerHTML='';
+  const add=h=>{const s=document.createElement('span');s.className='m';s.innerHTML=h;meta.appendChild(s);};
+  if(data.period) add('Dönem: <b>'+data.period+' '+data.Y+'</b>');
+  if(data.sicil) add('Sicil: <b>'+data.sicil+'</b>');
+  add('<b>'+data.flights.length+'</b> uçuş · <b>'+data.ground.length+'</b> yer günü');
+
+  const board=$('#board');board.innerHTML='';
+  keys.forEach(k=>{
+    const day=days[k],isFly=day.flights.length>0;
+    const row=document.createElement('div');row.className='day'+(isFly?' flyday':'');
+    let legs='';
+    if(isFly){
+      const city=day.flights.map(f=>CITY[f.dst]||CITY[f.org]).find(Boolean);
+      if(city) legs+='<div class="route-tag">'+city+'</div>';
+      day.flights.sort((a,b)=>a.dep-b.dep).forEach(f=>{
+        const cross=f.arr.getUTCDate()!==f.dep.getUTCDate();
+        const flag=f.layover?' <span class="flag" title="Konaklamalı görev — tarihi programdan teyit et">&#9888;</span>':'';
+        legs+='<div class="leg"><span class="no">'+f.no+'</span><span class="rt">'+f.org+' '+hhmm(f.dep)+
+          ' <span class="ar">&rarr;</span> '+f.dst+' '+hhmm(f.arr)+(cross?' <span class="nx">(+1)</span>':'')+'</span>'+flag+'</div>';
+      });
+    }
+    day.grounds.forEach(g=>{
+      const info=CODE[g.code]||{cls:'leave',label:g.code,desc:''};
+      let extra=info.desc;
+      if(g.timed) extra='Havalimanı nöbeti · '+hhmm(g.start)+'–'+hhmm(g.end);
+      else{const span=Math.round((g.end-g.start)/86400000);
+        if(span>1){const last=addDays(g.end,-1);extra=info.desc+' · '+g.start.getUTCDate()+'–'+last.getUTCDate();}}
+      legs+='<div class="leg" style="font-family:inherit"><span class="chip '+info.cls+'">'+info.label+'</span>'+
+        (extra?'<span class="chip-desc">'+extra+'</span>':'')+'</div>';
+    });
+    row.innerHTML='<div class="dnum"><div class="n">'+day.date.getUTCDate()+'</div><div class="w">'+
+      TRDAY[day.date.getUTCDay()]+'</div></div><div class="legs">'+legs+'</div>';
+    board.appendChild(row);
+  });
+
+  buildWarnings(data,keys);
+  icsCache=buildICS(data);
+  $('#panel').style.display='block';
+  $('#panel').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function buildWarnings(data,keys){
+  const warn=$('#warn');const parts=[];
+  if(data.layover.length){
+    parts.push('<b>Teyit edilmesi gereken uçuşlar (&#9888;):</b> '+data.layover.sort().join(', ')+
+      '. Bunlar konaklamalı ya da gece yarısını geçen görevler. Bu tip görevlerde dönüş günü bazı programlarda bir gün kayabiliyor — bu uçuşların gün/tarihini programdan teyit etmen önerilir.');
+  }
+  // kapsanmayan günler
+  const all=[];data.flights.forEach(f=>all.push(f.dep));data.ground.forEach(g=>all.push(g.start));
+  if(all.length){
+    const ut=d=>Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate());
+    const min=new Date(Math.min(...all.map(ut))),max=new Date(Math.max(...all.map(ut)));
+    const cov=new Set();
+    data.ground.forEach(g=>{let c=new Date(g.start);while(c<g.end){cov.add(dKey(c));c=addDays(c,1);}});
+    data.flights.forEach(f=>{cov.add(dKey(f.dep));cov.add(dKey(f.arr));});
+    const miss=[];let c=new Date(min);
+    while(c<=max){if(!cov.has(dKey(c)))miss.push(c.getUTCDate());c=addDays(c,1);}
+    if(miss.length) parts.push('<b>Kayıt çıkmayan günler:</b> '+miss.join(', ')+
+      '. Bunlar genelde önceki aydan devam eden görev (GG) ya da dinlenme günüdür; .ics dosyasına eklenmez.');
+  }
+  if(parts.length){warn.style.display='block';warn.innerHTML=parts.join('<br><br>');}
+  else warn.style.display='none';
+}
+
+// ---- .ics ----
+function wall(d){return d.getUTCFullYear()+pad(d.getUTCMonth()+1)+pad(d.getUTCDate())+'T'+pad(d.getUTCHours())+pad(d.getUTCMinutes())+'00';}
+function dateOnly(d){return d.getUTCFullYear()+pad(d.getUTCMonth()+1)+pad(d.getUTCDate());}
+function esc(s){return String(s).replace(/\\/g,'\\\\').replace(/,/g,'\\,').replace(/;/g,'\\;').replace(/\n/g,'\\n');}
+function fold(line){const enc=new TextEncoder();if(enc.encode(line).length<=74)return line;let out='',cur='';
+  for(const ch of line){if(enc.encode(cur+ch).length>73){out+=cur+'\r\n ';cur=ch;}else cur+=ch;}return out+cur;}
+function buildICS(data){
+  const L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//ucus-takvim//prototip//TR','CALSCALE:GREGORIAN',
+    'X-WR-CALNAME:Uçuş Programı'+(data.period?(' '+data.period):''),'X-WR-TIMEZONE:Europe/Istanbul',
+    'BEGIN:VTIMEZONE','TZID:Europe/Istanbul','BEGIN:STANDARD','DTSTART:19700101T000000',
+    'TZOFFSETFROM:+0300','TZOFFSETTO:+0300','TZNAME:+03','END:STANDARD','END:VTIMEZONE'];
+  let n=0;const ds=new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d+Z$/,'Z');
+  const ev=o=>{n++;L.push('BEGIN:VEVENT','UID:ut-'+Date.now()+'-'+n+'@prototip','DTSTAMP:'+ds,'SUMMARY:'+esc(o.s));
+    if(o.allDay)L.push('DTSTART;VALUE=DATE:'+dateOnly(o.start),'DTEND;VALUE=DATE:'+dateOnly(o.end),'TRANSP:TRANSPARENT');
+    else L.push('DTSTART;TZID=Europe/Istanbul:'+wall(o.start),'DTEND;TZID=Europe/Istanbul:'+wall(o.end));
+    if(o.loc)L.push('LOCATION:'+esc(o.loc));if(o.desc)L.push('DESCRIPTION:'+esc(o.desc));L.push('END:VEVENT');};
+  data.flights.forEach(f=>{const c=CITY[f.dst]||CITY[f.org]||'';
+    ev({s:f.no+' '+f.org+'\u2192'+f.dst+(c?(' ('+c+')'):'')+(f.layover?' \u26A0':''),start:f.dep,end:f.arr,
+      loc:f.org+' > '+f.dst,desc:'Türkiye saati (GMT+3).'+(f.layover?' Konaklamalı — tarihi teyit et.':'')});});
+  data.ground.forEach(g=>{const info=CODE[g.code]||{label:g.code,desc:''};
+    if(g.timed)ev({s:info.label+' - '+info.desc,start:g.start,end:g.end,loc:'IST'});
+    else ev({s:info.label+' - '+info.desc,start:g.start,end:g.end,allDay:true});});
+  L.push('END:VCALENDAR');
+  return L.map(fold).join('\r\n')+'\r\n';
+}
+$('#dl').addEventListener('click',async()=>{
+  if(!icsCache)return;
+  const blob=new Blob([icsCache],{type:'text/calendar;charset=utf-8'});
+  // 1) Mobil: iOS/Android paylaş sayfası — buradan Takvim'e ekle / Dosyalar'a kaydet
+  try{
+    const file=new File([blob],'ucus-programi.ics',{type:'text/calendar'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share({files:[file],title:'Uçuş Programı'});
+      return;
+    }
+  }catch(e){ if(e&&e.name==='AbortError') return; }
+  // 2) Masaüstü: normal indirme
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download='ucus-programi.ics';
+  document.body.appendChild(a);a.click();a.remove();
+  // 3) İndirme engelliyse (bazı tarayıcılar) yeni sekmede aç
+  setTimeout(()=>{ try{ window.open(url,'_blank'); }catch(e){} setTimeout(()=>URL.revokeObjectURL(url),3000); },300);
+});
+</script>
+</body>
+</html>
