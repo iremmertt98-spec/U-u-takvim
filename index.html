@@ -365,12 +365,13 @@ function buildICS(data){
     else L.push('DTSTART;TZID=Europe/Istanbul:'+wall(o.start),'DTEND;TZID=Europe/Istanbul:'+wall(o.end));
     if(o.loc)L.push('LOCATION:'+esc(o.loc));if(o.desc)L.push('DESCRIPTION:'+esc(o.desc));L.push('END:VEVENT');};
   data.flights.forEach(f=>{const c=CITY[f.dst]||CITY[f.org]||'';
+    const ucus='Uçuş: '+f.org+' '+hhmm(f.dep)+' \u2192 '+f.dst+' '+hhmm(f.arr);
     const imza=(f.signOn?('İmza (sign-on): '+hhmm(f.signOn)):'')+
                (f.signOn&&f.signOff?'\n':'')+
                (f.signOff?('İmza sonu (sign-off): '+hhmm(f.signOff)):'');
     ev({s:f.no+' '+f.org+'\u2192'+f.dst+(c?(' ('+c+')'):'')+(f.layover?' \u26A0':''),start:f.dep,end:f.arr,
       loc:f.org+' > '+f.dst,
-      desc:(imza?imza+'\n':'')+'Türkiye saati (GMT+3).'+(f.layover?' Konaklamalı — tarihi teyit et.':'')});});
+      desc:ucus+'\n'+(imza?imza+'\n':'')+'Türkiye saati (GMT+3).'+(f.layover?' Konaklamalı — tarihi teyit et.':'')});});
   data.ground.forEach(g=>{const info=CODE[g.code]||{label:g.code,desc:''};
     if(g.timed)ev({s:info.label+' - '+info.desc,start:g.start,end:g.end,loc:'IST'});
     else ev({s:info.label+' - '+info.desc,start:g.start,end:g.end,allDay:true});});
