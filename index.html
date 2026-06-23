@@ -59,6 +59,7 @@
   .chip.cfr{background:#efe7f5;color:#6a3aa0;border:1px solid #d6c2ee}
   .chip.sby{background:#fce4ec;color:#b0185f;border:1px solid #f3bcd2}
   .chip.leave{background:#ededed;color:#555;border:1px solid #cfcfcf}
+  .chip.imza{background:#fbe6cf;color:var(--amber-deep);border:1px solid #efd09a}
   .chip-desc{font-size:12px;color:var(--slate);margin-left:8px}
   .warn{margin-top:18px;background:#fdf3e2;border:1px solid #f0d49a;border-radius:10px;
     padding:12px 14px;font-size:13px;color:#7a5a12;display:none}
@@ -208,7 +209,7 @@ function parseRoster(text){
   const mbAll=[...text.matchAll(/\bMB:\s*(\d{2})([A-Z]{3})/g)];
   const cmp=(a,b)=>(a.mo-b.mo)||(a.d-b.d);
 
-  const flights=[]; const layoverNo=new Set();
+  const flights=[]; const duties=[]; const layoverNo=new Set();
   for(let i=0;i<mbAll.length;i++){
     const start=mbAll[i].index, end=(i+1<mbAll.length)?mbAll[i+1].index:text.length;
     const seg=text.slice(start,end);
@@ -251,6 +252,13 @@ function parseRoster(text){
     for(let k=1;k<made.length;k++){
       if(made[k].dep<made[k-1].arr){made[k].dep=addDays(made[k].dep,1);made[k].arr=addDays(made[k].arr,1);}
     }
+    // imza barları: imza başı → ilk kalkış (uçuş öncesi ~1-1.5s), son iniş → imza sonu
+    if(made.length){
+      const byDep=made.slice().sort((a,b)=>a.dep-b.dep), byArr=made.slice().sort((a,b)=>a.arr-b.arr);
+      const fd=byDep[0], la=byArr[byArr.length-1];
+      if(signOn&&signOn<fd.dep) duties.push({kind:'imza',start:signOn,end:fd.dep,no:fd.no,ap:fd.org});
+      if(signOff&&la.arr<signOff) duties.push({kind:'imzaSonu',start:la.arr,end:signOff,no:la.no,ap:la.dst});
+    }
   }
   // konaklama VEYA gece yarısını geçen görevleri "teyit et" olarak işaretle
   flights.forEach(f=>{ if(f.arr.getUTCDate()!==f.dep.getUTCDate()) f.layover=true; if(f.layover) layoverNo.add(f.no); });
@@ -291,16 +299,20 @@ function parseRoster(text){
       ground.push({code:cm[1],allDay:true,start:s,end:e});
     }
   }
-  return {Y,sicil,period,flights:uniq,ground,layover:[...layoverNo]};
+  // dedupe imza barları
+  const dseen=new Set(),duniq=[];
+  duties.sort((a,b)=>a.start-b.start).forEach(d=>{const k=d.kind+'|'+(+d.start);if(!dseen.has(k)){dseen.add(k);duniq.push(d);}});
+  return {Y,sicil,period,flights:uniq,ground,duties:duniq,layover:[...layoverNo]};
 }
 
 // ---- ekran ----
 function render(data){
   const days={};
   const keyOf=d=>d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate());
-  const ensure=d=>days[keyOf(d)]||(days[keyOf(d)]={date:new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate())),flights:[],grounds:[]});
+  const ensure=d=>days[keyOf(d)]||(days[keyOf(d)]={date:new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate())),flights:[],grounds:[],duties:[]});
   data.flights.forEach(f=>ensure(f.dep).flights.push(f));
   data.ground.forEach(g=>ensure(g.start).grounds.push(g));
+  (data.duties||[]).forEach(d=>ensure(d.start).duties.push(d));
   const keys=Object.keys(days).sort();
 
   const meta=$('#meta');meta.innerHTML='';
@@ -311,21 +323,22 @@ function render(data){
 
   const board=$('#board');board.innerHTML='';
   keys.forEach(k=>{
-    const day=days[k],isFly=day.flights.length>0;
+    const day=days[k],isFly=day.flights.length>0||day.duties.length>0;
     const row=document.createElement('div');row.className='day'+(isFly?' flyday':'');
     let legs='';
+    const dutyBar=d=>'<div class="leg"><span class="chip imza">'+(d.kind==='imza'?'İMZA':'İMZA SONU')+
+      '</span><span class="chip-desc">'+hhmm(d.start)+'\u2013'+hhmm(d.end)+' &middot; '+d.no+'</span></div>';
     if(isFly){
       const city=day.flights.map(f=>CITY[f.dst]||CITY[f.org]).find(Boolean);
       if(city) legs+='<div class="route-tag">'+city+'</div>';
+      day.duties.filter(d=>d.kind==='imza').sort((a,b)=>a.start-b.start).forEach(d=>legs+=dutyBar(d));
       day.flights.sort((a,b)=>a.dep-b.dep).forEach(f=>{
         const cross=f.arr.getUTCDate()!==f.dep.getUTCDate();
         const flag=f.layover?' <span class="flag" title="Konaklamalı görev — tarihi programdan teyit et">&#9888;</span>':'';
         legs+='<div class="leg"><span class="no">'+f.no+'</span><span class="rt">'+f.org+' '+hhmm(f.dep)+
           ' <span class="ar">&rarr;</span> '+f.dst+' '+hhmm(f.arr)+(cross?' <span class="nx">(+1)</span>':'')+'</span>'+flag+'</div>';
       });
-      const so=day.flights.map(f=>f.signOn).filter(Boolean).sort((a,b)=>a-b)[0];
-      const sf=day.flights.map(f=>f.signOff).filter(Boolean).sort((a,b)=>a-b).pop();
-      if(so||sf) legs+='<div class="imza">'+(so?'İmza '+hhmm(so):'')+(so&&sf?' &middot; ':'')+(sf?'İmza sonu '+hhmm(sf):'')+'</div>';
+      day.duties.filter(d=>d.kind==='imzaSonu').sort((a,b)=>a.start-b.start).forEach(d=>legs+=dutyBar(d));
     }
     day.grounds.forEach(g=>{
       const info=CODE[g.code]||{cls:'leave',label:g.code,desc:''};
@@ -385,15 +398,16 @@ function buildICS(data){
   const ev=o=>{n++;L.push('BEGIN:VEVENT','UID:ut-'+Date.now()+'-'+n+'@prototip','DTSTAMP:'+ds,'SUMMARY:'+esc(o.s));
     if(o.allDay)L.push('DTSTART;VALUE=DATE:'+dateOnly(o.start),'DTEND;VALUE=DATE:'+dateOnly(o.end),'TRANSP:TRANSPARENT');
     else L.push('DTSTART;TZID=Europe/Istanbul:'+wall(o.start),'DTEND;TZID=Europe/Istanbul:'+wall(o.end));
+    if(o.color)L.push('COLOR:'+o.color);
     if(o.loc)L.push('LOCATION:'+esc(o.loc));if(o.desc)L.push('DESCRIPTION:'+esc(o.desc));L.push('END:VEVENT');};
   data.flights.forEach(f=>{const c=CITY[f.dst]||CITY[f.org]||'';
-    const ucus='Uçuş: '+f.org+' '+hhmm(f.dep)+' \u2192 '+f.dst+' '+hhmm(f.arr);
-    const imza=(f.signOn?('İmza (sign-on): '+hhmm(f.signOn)):'')+
-               (f.signOn&&f.signOff?'\n':'')+
-               (f.signOff?('İmza sonu (sign-off): '+hhmm(f.signOff)):'');
     ev({s:f.no+' '+f.org+'\u2192'+f.dst+(c?(' ('+c+')'):'')+(f.layover?' \u26A0':''),start:f.dep,end:f.arr,
       loc:f.org+' > '+f.dst,
-      desc:ucus+'\n'+(imza?imza+'\n':'')+'Türkiye saati (GMT+3).'+(f.layover?' Konaklamalı — tarihi teyit et.':'')});});
+      desc:'Uçuş: '+f.org+' '+hhmm(f.dep)+' \u2192 '+f.dst+' '+hhmm(f.arr)+'\nTürkiye saati (GMT+3).'+(f.layover?' Konaklamalı — tarihi teyit et.':'')});});
+  (data.duties||[]).forEach(d=>{const im=d.kind==='imza';
+    ev({s:(im?'\u270D İmza':'\u270D İmza sonu')+' \u00B7 '+d.no,start:d.start,end:d.end,loc:'IST',
+      color:im?'orange':'gold',
+      desc:(im?'Uçuş öncesi imza / brifing.':'Uçuş sonrası imza.')+' Türkiye saati (GMT+3).'});});
   data.ground.forEach(g=>{const info=CODE[g.code]||{label:g.code,desc:''};
     if(g.timed)ev({s:info.label+' - '+info.desc,start:g.start,end:g.end,loc:'IST'});
     else ev({s:info.label+' - '+info.desc,start:g.start,end:g.end,allDay:true});});
