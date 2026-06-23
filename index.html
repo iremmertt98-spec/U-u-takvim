@@ -147,6 +147,8 @@ const CODE={
  IBV:{cls:'off',label:'IBV',desc:'Evlilik yıldönümü izni'},
  III:{cls:'leave',label:'III',desc:'Yıllık izin'},
  ASBY:{cls:'sby',label:'ASBY',desc:'Havalimanı nöbeti'},
+ HSBY:{cls:'sby',label:'HSBY',desc:'Ev nöbeti'},
+ IBE:{cls:'off',label:'IBE',desc:'Değiştirilebilir boş gün'},
  GG:{cls:'leave',label:'GG',desc:'Önceki aydan devam eden görev'}};
 
 let icsCache=null;
@@ -216,28 +218,36 @@ function parseRoster(text){
     const blockStart={d:+mbAll[i][1],mo:TR[mbAll[i][2]]};
     if(blockStart.mo===undefined) continue;
     const isLayover=/YI\s*\/\s*YDS|YDS:/.test(seg);
-    // dönüş bacağı için en geç tarih: konaklamada tüm tarih jetonları, değilse sadece MB/GMB
-    const dre=isLayover?/\b(?:MB|GMB|MS|GMS):\s*(\d{2})([A-Z]{3})/g:/\b(?:MB|GMB):\s*(\d{2})([A-Z]{3})/g;
-    let maxDate={...blockStart},dm;
-    while((dm=dre.exec(seg))){const mo=TR[dm[2]];if(mo===undefined)continue;const c={d:+dm[1],mo};if(cmp(c,maxDate)>0)maxDate=c;}
     // imza başı (GMB / sign-on) ve imza sonu (GMS / sign-off) — yerel saat (imza istasyonu IST kabul)
     let signOn=null,signOff=null;
     const gmb=[...seg.matchAll(/\bGMB:\s*(\d{2})([A-Z]{3})\s+(\d{1,2}:\d{2})/g)];
     const gms=[...seg.matchAll(/\bGMS:\s*(\d{2})([A-Z]{3})\s+(\d{1,2}:\d{2})/g)];
     if(gmb.length){const g=gmb[0],mo=TR[g[2]];if(mo!==undefined)signOn=mkTR(Y,{d:+g[1],mo},cleanT(g[3]),'IST');}
     if(gms.length){const g=gms[gms.length-1],mo=TR[g[2]];if(mo!==undefined)signOff=mkTR(Y,{d:+g[1],mo},cleanT(g[3]),'IST');}
+    // konaklama dönüşü: varış günü = son GMS (imza sonu / görev bitiş günü)
+    let gmsAnc=null,gx,gxr=/\bGMS:\s*(\d{2})([A-Z]{3})/g;
+    while((gx=gxr.exec(seg))){const mo=TR[gx[2]];if(mo!==undefined)gmsAnc={d:+gx[1],mo};}
 
     const made=[];
     legs.forEach(leg=>{
       const isReturn=(leg.dst==='IST'&&leg.org!=='IST');
-      const anc=isReturn?maxDate:blockStart;
-      let dep=mkTR(Y,anc,leg.depL,leg.org), arr=mkTR(Y,anc,leg.arrL,leg.dst);
-      if(arr<dep) arr=addDays(arr,1);
+      let dep,arr;
+      if(isReturn&&isLayover&&gmsAnc){
+        // konaklama dönüşü: varışı imza-sonu gününe oturt, kalkışı ondan türet
+        arr=mkTR(Y,gmsAnc,leg.arrL,leg.dst);
+        dep=mkTR(Y,gmsAnc,leg.depL,leg.org);
+        if(dep>arr) dep=addDays(dep,-1);
+      }else{
+        dep=mkTR(Y,blockStart,leg.depL,leg.org);
+        arr=mkTR(Y,blockStart,leg.arrL,leg.dst);
+        if(arr<dep) arr=addDays(arr,1);
+        if(signOn&&dep<signOn){dep=addDays(dep,1);arr=addDays(arr,1);} // imzadan önce kalkış olamaz (gece yarısını geçen görev)
+      }
       const f={no:leg.no,org:leg.org,dst:leg.dst,dep,arr,layover:isLayover,signOn,signOff};
       made.push(f); flights.push(f);
       if(isLayover) layoverNo.add(leg.no);
     });
-    // kronolojik düzeltme: bir bacak önceki bacağın varışından önce kalkamaz (sıra düzeninde)
+    // kronolojik düzeltme: bir bacak önceki bacağın varışından önce kalkamaz (emniyet ağı)
     for(let k=1;k<made.length;k++){
       if(made[k].dep<made[k-1].arr){made[k].dep=addDays(made[k].dep,1);made[k].arr=addDays(made[k].arr,1);}
     }
@@ -249,13 +259,25 @@ function parseRoster(text){
   flights.sort((a,b)=>a.dep-b.dep).forEach(f=>{const k=f.no+'|'+dKey(f.dep);if(!seen.has(k)){seen.add(k);uniq.push(f);}});
 
   // ---- yer günleri (blok-yerel MB/MS) ----
-  const codeRe=/\b(CFR|IBC|IBB|IBV|IBY|III|ASBY|GG)\s+IST\s*\/\s*(\d{1,2}:\d{2})\s+IST\s*\/\s*(\d{1,2}:\d{2})/;
+  const codeRe=/\b(CFR|IBC|IBB|IBV|IBY|IBE|III|ASBY)\s+IST\s*\/\s*(\d{1,2}:\d{2})\s+IST\s*\/\s*(\d{1,2}:\d{2})/;
+  const hsbyRe=/\bHSBY\s+(\d{1,2}:\d{2})\s+(\d{1,2}:\d{2})/;   // ev nöbeti: çıplak saat
   const ground=[],gseen=new Set();
   for(let i=0;i<mbAll.length;i++){
     const start=mbAll[i].index+mbAll[i][0].length, end=(i+1<mbAll.length)?mbAll[i+1].index:text.length;
     const seg=text.slice(start,end);
-    const cm=seg.match(codeRe); if(!cm) continue;
     const d0=+mbAll[i][1], m0=TR[mbAll[i][2]]; if(m0===undefined) continue;
+    // Ev nöbeti (HSBY) — saatli, ASBY gibi
+    const hm=seg.match(hsbyRe);
+    if(hm){
+      const key='HSBY|'+m0+'|'+d0;
+      if(!gseen.has(key)){gseen.add(key);
+        let s=mkTR(Y,{d:d0,mo:m0},cleanT(hm[1]),'IST'), e=mkTR(Y,{d:d0,mo:m0},cleanT(hm[2]),'IST');
+        if(e<=s) e=addDays(e,1);
+        ground.push({code:'HSBY',timed:true,start:s,end:e});
+      }
+      continue;
+    }
+    const cm=seg.match(codeRe); if(!cm) continue;
     const ms=seg.match(/\bMS:\s*(\d{2})([A-Z]{3})/);
     let d1=d0,m1=m0; if(ms&&TR[ms[2]]!==undefined){d1=+ms[1];m1=TR[ms[2]];}
     const key=cm[1]+'|'+m0+'|'+d0; if(gseen.has(key)) continue; gseen.add(key);
@@ -338,7 +360,7 @@ function buildWarnings(data,keys){
     const min=new Date(Math.min(...all.map(ut))),max=new Date(Math.max(...all.map(ut)));
     const cov=new Set();
     data.ground.forEach(g=>{let c=new Date(g.start);while(c<g.end){cov.add(dKey(c));c=addDays(c,1);}});
-    data.flights.forEach(f=>{cov.add(dKey(f.dep));cov.add(dKey(f.arr));});
+    data.flights.forEach(f=>{cov.add(dKey(f.dep));cov.add(dKey(f.arr));if(f.signOn)cov.add(dKey(f.signOn));});
     const miss=[];let c=new Date(min);
     while(c<=max){if(!cov.has(dKey(c)))miss.push(c.getUTCDate());c=addDays(c,1);}
     if(miss.length) parts.push('<b>Kayıt çıkmayan günler:</b> '+miss.join(', ')+
