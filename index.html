@@ -405,7 +405,7 @@ function buildICS(data){
       loc:f.org+' > '+f.dst,
       desc:'Uçuş: '+f.org+' '+hhmm(f.dep)+' \u2192 '+f.dst+' '+hhmm(f.arr)+'\nTürkiye saati (GMT+3).'+(f.layover?' Konaklamalı — tarihi teyit et.':'')});});
   (data.duties||[]).forEach(d=>{const im=d.kind==='imza';
-    ev({s:(im?'\u270D İmza':'\u270D İmza sonu')+' \u00B7 '+d.no,start:d.start,end:d.end,loc:'IST',
+    ev({s:(im?'İmza':'İmza sonu')+' \u00B7 '+d.no,start:d.start,end:d.end,loc:'IST',
       color:im?'orange':'gold',
       desc:(im?'Uçuş öncesi imza / brifing.':'Uçuş sonrası imza.')+' Türkiye saati (GMT+3).'});});
   data.ground.forEach(g=>{const info=CODE[g.code]||{label:g.code,desc:''};
@@ -418,12 +418,14 @@ $('#dl').addEventListener('click',async()=>{
   if(!icsCache)return;
   const ua=navigator.userAgent||'';
   const isiOS=/iPhone|iPad|iPod/.test(ua)||(/Macintosh/.test(ua)&&navigator.maxTouchPoints>1);
-  // iOS: .ics'i doğrudan aç → "Tümünü Ekle" ekranı gelsin (paylaş sayfası takvim seçeneği vermiyor)
+  const blob=new Blob([icsCache],{type:'text/calendar;charset=utf-8'});
+  // iOS: blob: bağlantısına git → "Tümünü Ekle" ekranı gelir (data: bağlantısı yeni Safari'de engellenebiliyor)
   if(isiOS){
-    window.location.href='data:text/calendar;charset=utf-8,'+encodeURIComponent(icsCache);
+    const url=URL.createObjectURL(blob);
+    window.location.href=url;
+    setTimeout(()=>URL.revokeObjectURL(url),10000);
     return;
   }
-  const blob=new Blob([icsCache],{type:'text/calendar;charset=utf-8'});
   // Diğer mobil: paylaş sayfası
   try{
     const file=new File([blob],'ucus-programi.ics',{type:'text/calendar'});
